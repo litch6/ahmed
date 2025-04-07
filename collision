@@ -1,1 +1,28 @@
+#pragma once
+#include <SFML/Graphics.hpp>
+#include <optional>
 
+class Collision {
+public:
+	bool check(sf::FloatRect& c1,sf::FloatRect& c2,char& side) {
+		float l1 = c1.position.x, t1 = c1.position.y,w1=c1.size.x,h1=c1.size.y;
+		float l2 = c2.position.x, t2 = c2.position.y, w2 = c2.size.x, h2 = c2.size.y; c1.findIntersection();
+		if (l1 + w1 > l2 && l1 < l2) {
+			side = 'R';
+			return true;
+		}
+		else if (l1 < l2 + w2 && l1 + w1 > l2 + w2) {
+			side = 'L';
+			return true;
+		}
+		else if (t1 + h1 > t2 && t1 < t2) {
+			side = 'D';
+			return true;
+		}
+		else if (t1 < t2 + h2 && t1 + h1 > t2) {
+			side = 'U';
+			return true;
+		}
+		return false;
+	}
+};
