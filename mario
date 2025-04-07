@@ -1,0 +1,148 @@
+#pragma once
+#include <SFML/Graphics.hpp>
+#include <vector>
+#include <string>
+#include "collision.h"
+
+class Mario : public sf::Drawable,public sf::Transformable {
+private:
+	sf::Texture Texture;
+	sf::Vector2f postion = sf::Vector2f({ 100,100 });
+	float acceleration = 0.8f, g = 5.f, maxspeed = 5.f, speed = 0.f, jumppower =-20.f,maxy;
+	sf::IntRect stand,moverect[3],jumprect,die;
+	sf::Clock mclock,jclock;
+public:
+	sf::Sprite Marios;
+	bool ismoving = false, isonground = false, isjumping = false, isalive = true;
+	Mario(std::filesystem::path& p) : Marios(Texture) {
+		Texture.loadFromFile(p);
+		Marios.setPosition({ 10,10 });
+		Marios.scale({ 1,1 });
+		stand =sf::IntRect({ 0,48 }, { 16,16 });
+		moverect[0] = sf::IntRect({16,48},{16,15});
+		moverect[1] = sf::IntRect({32,48},{16,16});
+		moverect[2] = sf::IntRect({48,48},{16,16});
+		jumprect = sf::IntRect({ 64,48 }, { 16,16 });
+		die = sf::IntRect({ 80,48 }, { 16,16 });
+	}
+
+	void move() {
+		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left))L_move();
+		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right))R_move();
+		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Space)) jump();
+	}
+
+	void L_move() {
+		Marios.setScale({ -1,1 });
+		if (speed > maxspeed)speed += acceleration;
+		else speed = maxspeed;
+		postion.x -= speed;
+		ismoving = true;
+	}
+	void R_move() {
+		Marios.setScale({ 1,1 });
+		if (speed < maxspeed)speed += acceleration;
+		else speed = maxspeed;
+		postion.x += speed;
+		ismoving = true;
+	}
+	void jump() {
+		maxy = postion.y - 200;
+		if (isonground) {
+			maxy = jumppower;
+			//postion.y += jumppower;
+			jclock.restart();
+			isjumping = true;
+			isonground = false;
+		}
+	}
+	void stop() {
+		if (!ismoving) {
+			if (speed > 0)
+				speed -= acceleration;
+			else if (speed < 0)
+				speed += acceleration;
+			if (speed == 0) {
+				ismoving = false;
+			}
+		}
+		Marios.setPosition(postion);
+	}
+	void animation() {
+		if (isalive) {
+			if (!isonground)Marios.setTextureRect(jumprect);
+			else if (ismoving) {
+
+				if (mclock.getElapsedTime().asMilliseconds() >= 150) {
+					static int f = 0;
+					Marios.setTextureRect(moverect[f]);
+					f = (f + 1) % 3;
+					mclock.restart();
+				}
+			}
+			else if (!ismoving && !isjumping)Marios.setTextureRect(stand);
+		}
+		else Marios.setTextureRect(die);
+	}
+
+	void physics() {
+		if (isalive) {
+			if(isjumping)postion.y += jumppower;
+			if(!isonground)postion.y += g;
+			g += g;
+			sf::FloatRect marioBounds = Marios.getGlobalBounds();
+			/*if (postion.y - marioBounds.size.y < 0) {
+				postion.y = marioBounds.size.y;
+			}
+			else if (postion.y + marioBounds.size.y > 208) {
+				postion.y = 208 - marioBounds.size.y;
+				isonground = true;
+				isjumping = false;
+			}*/
+		}
+		if (speed == 0)ismoving = false;
+		if (isjumping&&jclock.getElapsedTime().asMilliseconds() >= 200) {
+			isjumping = false;
+			jclock.restart();
+		}
+		g = 5;
+		if (!ismoving)stop();
+		Marios.setPosition(postion);
+	}
+	void viewupdate(sf::View& v1) {
+		if (postion.x > 0 && postion.x < 800 && postion.y >0 && postion.y < 250)v1.setCenter(postion);
+		else v1.setCenter(v1.getCenter());
+	}
+	void hcollison(sf::Vector2f& old, sf::VertexArray& map) {
+		Collision check;
+		char side = ' ';
+		sf::FloatRect c1 = Marios.getGlobalBounds();
+		for (size_t i = 0; i < map.getVertexCount(); i += 6) {
+			float x = map[i].position.x, y = map[i].position.y;
+			sf::FloatRect block({ x , y }, { 16,16 });
+			if (check.check(c1, block, side)) {
+				if (side == 'R'|| side=='L') {
+					ismoving = false;
+					Marios.setPosition(old);
+				}
+				else if (side == 'U' || side == 'D') {
+					isjumping = false;
+					Marios.setPosition(old);
+				}
+			}
+		}
+		
+	}
+	void update(sf::View& v1,sf::VertexArray& map) {
+		physics();
+		sf::Vector2f old=postion;
+		hcollison(old, map);
+		move();
+		animation();
+		viewupdate(v1);
+	}
+private:
+	virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const override {
+		target.draw(Marios, states);
+	}
+};
