@@ -3,12 +3,16 @@
 #include <vector>
 #include <string>
 #include "collision.h"
+#include "MapDraw.h"
+
+using namespace std;
 
 class Mario : public sf::Drawable,public sf::Transformable {
 private:
 	sf::Texture Texture;
 	sf::Vector2f postion = sf::Vector2f({ 100,100 });
-	float acceleration = 0.8f, g = 5.f, maxspeed = 5.f, speed = 0.f, jumppower =-20.f,maxy;
+	sf::Vector2f old = sf::Vector2f({ 100,150 });
+	float acceleration = 5.656854f, g = 1.f, maxspeed =16.f, speed = 10.343f, jumppower =-11.3137,maxy, velocityY=0;
 	sf::IntRect stand,moverect[3],jumprect,die;
 	sf::Clock mclock,jclock;
 public:
@@ -34,26 +38,27 @@ public:
 
 	void L_move() {
 		Marios.setScale({ -1,1 });
-		if (speed > maxspeed)speed += acceleration;
+		float dt = jclock.restart().asSeconds();
+		if (speed < maxspeed) {
+			speed += acceleration*dt;
+		}
 		else speed = maxspeed;
-		postion.x -= speed;
 		ismoving = true;
+		postion.x -= speed;
 	}
 	void R_move() {
 		Marios.setScale({ 1,1 });
-		if (speed < maxspeed)speed += acceleration;
+		float dt = jclock.restart().asSeconds();
+		if (speed < maxspeed)speed += acceleration * dt;
 		else speed = maxspeed;
-		postion.x += speed;
 		ismoving = true;
+		postion.x += speed;
 	}
 	void jump() {
-		maxy = postion.y - 200;
 		if (isonground) {
-			maxy = jumppower;
-			//postion.y += jumppower;
-			jclock.restart();
 			isjumping = true;
 			isonground = false;
+			velocityY = jumppower;
 		}
 	}
 	void stop() {
@@ -85,59 +90,61 @@ public:
 		else Marios.setTextureRect(die);
 	}
 
-	void physics() {
+	void physics(sf::Vector2f& old, vector<int> map, sf::Vector2u block, sf::Vector2u size) {
 		if (isalive) {
-			if(isjumping)postion.y += jumppower;
-			if(!isonground)postion.y += g;
-			g += g;
-			sf::FloatRect marioBounds = Marios.getGlobalBounds();
-			/*if (postion.y - marioBounds.size.y < 0) {
-				postion.y = marioBounds.size.y;
+			if (isjumping||!isonground) {
+				velocityY += g ;
+				postion.y += velocityY;
 			}
-			else if (postion.y + marioBounds.size.y > 208) {
-				postion.y = 208 - marioBounds.size.y;
-				isonground = true;
-				isjumping = false;
-			}*/
 		}
 		if (speed == 0)ismoving = false;
-		if (isjumping&&jclock.getElapsedTime().asMilliseconds() >= 200) {
-			isjumping = false;
-			jclock.restart();
-		}
-		g = 5;
 		if (!ismoving)stop();
+		hcollison(old, map, block, size);
 		Marios.setPosition(postion);
 	}
 	void viewupdate(sf::View& v1) {
 		if (postion.x > 0 && postion.x < 800 && postion.y >0 && postion.y < 250)v1.setCenter(postion);
 		else v1.setCenter(v1.getCenter());
 	}
-	void hcollison(sf::Vector2f& old, sf::VertexArray& map) {
+	void hcollison(sf::Vector2f& old,vector<int> map,sf::Vector2u block,sf::Vector2u size) {
 		Collision check;
 		char side = ' ';
 		sf::FloatRect c1 = Marios.getGlobalBounds();
-		for (size_t i = 0; i < map.getVertexCount(); i += 6) {
-			float x = map[i].position.x, y = map[i].position.y;
-			sf::FloatRect block({ x , y }, { 16,16 });
-			if (check.check(c1, block, side)) {
-				if (side == 'R'|| side=='L') {
-					ismoving = false;
-					Marios.setPosition(old);
-				}
-				else if (side == 'U' || side == 'D') {
-					isjumping = false;
-					Marios.setPosition(old);
+		for (unsigned int i = 0; i < size.x; i++) {
+			for (unsigned int j = 0; j < size.y; j++) {
+				sf::FloatRect c2 = sf::FloatRect({ i * block.x*1.f,j * block.y*1.f }, { block.x*1.f,block.y*1.f });
+				const int tn = map[i + (j * size.x)];
+				if (tn >= 0 && check.check(c1, c2, side)) {
+					if (side == 'R') {
+						speed = 0;
+						postion.x -= 16;
+						ismoving = false;
+					}
+					else if (side == 'L') {
+						speed = 0;
+						postion.x += 16;
+						ismoving = false;
+					}
+					if (side == 'U') {
+						velocityY = 0;
+						postion.y += 1;
+						isjumping = false;
+					}
+					else if (side == 'D') {
+						velocityY = 0;
+						postion.y -= 1;
+						isonground = true;
+						isjumping = false;
+					}
 				}
 			}
 		}
 		
 	}
-	void update(sf::View& v1,sf::VertexArray& map) {
-		physics();
-		sf::Vector2f old=postion;
-		hcollison(old, map);
+	void update(sf::View& v1,vector<int> map,sf::Vector2u block,sf::Vector2u size) {
+		old = postion;
 		move();
+		physics(old, map, block, size);
 		animation();
 		viewupdate(v1);
 	}
