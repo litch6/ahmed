@@ -1,46 +1,47 @@
 #pragma once
 #include <SFML/Graphics.hpp>
+#include <algorithm>
 #include <vector>
 #include <string>
 #include "collision.h"
-#include "MapDraw.h"
 
 using namespace std;
 
-class Mario : public sf::Drawable,public sf::Transformable {
+class Mario : public sf::Drawable, public sf::Transformable {
 private:
 	sf::Texture Texture;
+	Collision check;
 	sf::Vector2f postion = sf::Vector2f({ 100,100 });
-	sf::Vector2f old = sf::Vector2f({ 100,150 });
-	float acceleration = 5.656854f, g = 1.f, maxspeed =16.f, speed = 10.343f, jumppower =-11.3137,maxy, velocityY=0;
-	sf::IntRect stand,moverect[3],jumprect,die;
-	sf::Clock mclock,jclock;
+	float acceleration = 2.f, g = 1.f, maxspeed = 4.f, speed = 0, jumppower = -11.3137, maxy, velocityY = 0;
+	sf::IntRect stand, moverect[3], jumprect, die;
+	sf::Clock mclock, jclock;
 public:
 	sf::Sprite Marios;
-	bool ismoving = false, isonground = false, isjumping = false, isalive = true;
+	bool ismoving = false, isonground = false, isjumping = false, isalive = true, falling = true, left = true, right = true, canjump = true;
 	Mario(std::filesystem::path& p) : Marios(Texture) {
 		Texture.loadFromFile(p);
 		Marios.setPosition({ 10,10 });
 		Marios.scale({ 1,1 });
-		stand =sf::IntRect({ 0,48 }, { 16,16 });
-		moverect[0] = sf::IntRect({16,48},{16,15});
-		moverect[1] = sf::IntRect({32,48},{16,16});
-		moverect[2] = sf::IntRect({48,48},{16,16});
+		stand = sf::IntRect({ 0,48 }, { 16,16 });
+		moverect[0] = sf::IntRect({ 16,48 }, { 16,15 });
+		moverect[1] = sf::IntRect({ 32,48 }, { 16,16 });
+		moverect[2] = sf::IntRect({ 48,48 }, { 16,16 });
 		jumprect = sf::IntRect({ 64,48 }, { 16,16 });
 		die = sf::IntRect({ 80,48 }, { 16,16 });
 	}
 
 	void move() {
-		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left))L_move();
-		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right))R_move();
-		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Space)) jump();
+		if (isalive) {
+			if (left && sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left))L_move();
+			if (right && sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right))R_move();
+			if (canjump&&sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Space)) jump();
+		}
 	}
 
 	void L_move() {
 		Marios.setScale({ -1,1 });
-		float dt = jclock.restart().asSeconds();
 		if (speed < maxspeed) {
-			speed += acceleration*dt;
+			speed += acceleration ;
 		}
 		else speed = maxspeed;
 		ismoving = true;
@@ -48,15 +49,15 @@ public:
 	}
 	void R_move() {
 		Marios.setScale({ 1,1 });
-		float dt = jclock.restart().asSeconds();
-		if (speed < maxspeed)speed += acceleration * dt;
+		if (speed < maxspeed)speed += acceleration ;
 		else speed = maxspeed;
 		ismoving = true;
 		postion.x += speed;
 	}
 	void jump() {
-		if (isonground) {
+		if (isonground&&!falling) {
 			isjumping = true;
+			falling = true;
 			isonground = false;
 			velocityY = jumppower;
 		}
@@ -75,7 +76,7 @@ public:
 	}
 	void animation() {
 		if (isalive) {
-			if (!isonground)Marios.setTextureRect(jumprect);
+			if (isjumping||falling)Marios.setTextureRect(jumprect);
 			else if (ismoving) {
 
 				if (mclock.getElapsedTime().asMilliseconds() >= 150) {
@@ -85,66 +86,153 @@ public:
 					mclock.restart();
 				}
 			}
-			else if (!ismoving && !isjumping)Marios.setTextureRect(stand);
+			else if (!ismoving && !isjumping && !falling)Marios.setTextureRect(stand);
 		}
 		else Marios.setTextureRect(die);
 	}
-
-	void physics(sf::Vector2f& old, vector<int> map, sf::Vector2u block, sf::Vector2u size) {
-		if (isalive) {
-			if (isjumping||!isonground) {
-				velocityY += g ;
-				postion.y += velocityY;
+	void rightblock(vector<int> map, sf::Vector2u block, sf::Vector2u size) {
+		sf::FloatRect bounds = Marios.getGlobalBounds();
+		bounds.position.x += bounds.size.x;
+		bounds.position.y += 1;
+		bounds.size.x = 1.f;
+		bounds.size.y -= 2;
+		int startx = int(bounds.position.x / block.x);
+		int endx = int((bounds.position.x + bounds.size.x) / block.x);
+		int starty = int((bounds.position.y) / block.y);
+		int endy = int((bounds.position.y + bounds.size.y) / block.y);
+		for (int i = startx; i <= endx; i++) {
+			for (int j = starty; j <= endy; j++) {
+				if (i > 0 && i < size.x && j>0 && j < size.y) {
+					if (map[i + j * size.x] < 0)right = true;
+					else right = false;
+				}
 			}
 		}
-		if (speed == 0)ismoving = false;
+	}
+	void leftblock(vector<int> map, sf::Vector2u block, sf::Vector2u size) {
+		sf::FloatRect bounds = Marios.getGlobalBounds();
+		sf::FloatRect({ bounds.position.x - 1,bounds.position.y + 1 }, { 1.f,bounds.size.y - 2 });
+		int startx = bounds.position.x / block.x;
+		int endx = (bounds.position.x + bounds.size.x) / block.x;
+		int starty = bounds.position.y / block.y;
+		int endy = (bounds.position.y + bounds.size.y)/block.y;
+		for (int i = startx; i <= endx; i++) {
+			for (int j = starty; j <= endy; j++) {
+				if (i > 0 && i < size.x && j>0 && j < size.y) {
+					if (map[i + j * size.x] < 0)left = true;
+					else left = false;
+				}
+			}
+		}
+	}
+	void upblock(vector<int> map, sf::Vector2u block, sf::Vector2u size) {
+		sf::FloatRect bounds = Marios.getGlobalBounds();
+		bounds = sf::FloatRect({ bounds.position.x + 1,bounds.position.y - 1 }, { bounds.size.x - 2,1.f });
+		int startx = bounds.position.x / block.x;
+		int endx = (bounds.position.x + bounds.size.x) / block.x;
+		int starty = bounds.position.y / block.y;
+		int endy = (bounds.position.y + bounds.size.y) / block.y;
+		for (int i = startx; i < endx; i++) {
+			for (int j = starty; j < endy; j++) {
+				if (i > 0 && i < size.x && j>0 && j < size.y) {
+					if (map[i + j * size.x] < 0) {
+						canjump = true;
+						break;
+					}
+					else canjump = false;
+				}
+			}
+		}
+	}
+	void physics( vector<int> map, sf::Vector2u block, sf::Vector2u size) {
+		if (isalive) {
+			if (!isonground|| falling) {
+				velocityY += g;
+				postion.y += velocityY;
+				falling = true;
+			}
+			else velocityY = 0;
+		}
+		if (abs(speed)<0.1f)ismoving = false;
 		if (!ismoving)stop();
-		hcollison(old, map, block, size);
+		if (!right)rightblock(map, block, size);
+		if (!canjump)upblock(map, block, size);
+		if (!left)leftblock(map, block, size);
+		hcollison(map, block, size);
+		if (Marios.getPosition().y > 232) {
+			isalive = false;
+		}
 		Marios.setPosition(postion);
 	}
 	void viewupdate(sf::View& v1) {
 		if (postion.x > 0 && postion.x < 800 && postion.y >0 && postion.y < 250)v1.setCenter(postion);
 		else v1.setCenter(v1.getCenter());
 	}
-	void hcollison(sf::Vector2f& old,vector<int> map,sf::Vector2u block,sf::Vector2u size) {
-		Collision check;
+	void hcollison(vector<int> map,sf::Vector2u block,sf::Vector2u size) {
 		char side = ' ';
 		sf::FloatRect c1 = Marios.getGlobalBounds();
-		for (unsigned int i = 0; i < size.x; i++) {
-			for (unsigned int j = 0; j < size.y; j++) {
+		int starx = max(int(c1.position.x / block.x - 1), 0);
+		int endx = min(int((c1.position.x + c1.size.x) / block.x) + 1, int(size.x));
+		int starty = max(int(c1.position.y / block.y - 1), 0);
+		int endy = min(int((c1.position.y + c1.size.y) / block.y) + 1, int(size.y));
+		bool touch = false;
+		for ( int i =starx ; i < endx; i++) {
+			for (int j = starty; j < endy; j++) {
 				sf::FloatRect c2 = sf::FloatRect({ i * block.x*1.f,j * block.y*1.f }, { block.x*1.f,block.y*1.f });
 				const int tn = map[i + (j * size.x)];
 				if (tn >= 0 && check.check(c1, c2, side)) {
+					if (side == 'D') {
+						velocityY = 0;
+						postion.y = c2.position.y - c1.size.y;
+						falling = false;
+						isjumping = false;
+						isonground = true;
+						touch = true;
+					}
+					 else if (side == 'U') {
+						canjump = false;
+						 velocityY = 0;
+						 postion.y = c2.position.y + c2.size.y;
+					 }
 					if (side == 'R') {
+						postion.x = c2.position.x - c1.size.x;
 						speed = 0;
-						postion.x -= 16;
 						ismoving = false;
+						right = false;
 					}
 					else if (side == 'L') {
 						speed = 0;
-						postion.x += 16;
+						left = false;
+						postion.x = (c2.position.x + c2.size.x)+c1.size.x;
 						ismoving = false;
-					}
-					if (side == 'U') {
-						velocityY = 0;
-						postion.y += 1;
-						isjumping = false;
-					}
-					else if (side == 'D') {
-						velocityY = 0;
-						postion.y -= 1;
-						isonground = true;
-						isjumping = false;
 					}
 				}
 			}
 		}
-		
+		if (!touch) {
+			int checkStartX = max(int(c1.position.x / block.x), 0);
+			int checkEndX = min(int((c1.position.x + c1.size.x) / block.x), int(size.x) - 1);
+			int checkY = min(int((c1.position.y + c1.size.y + 1) / block.y), int(size.y) - 1);
+
+			bool anyBlockBelow = false;
+
+			for (int x = checkStartX; x <= checkEndX; x++) {
+				int index = x + (checkY * size.x);
+				if (index >= 0 && index < map.size() && map[index] >= 0) {
+					anyBlockBelow = true;
+					break;
+				}
+			}
+
+			if (!anyBlockBelow) {
+				falling = true;
+				isonground = false;
+			}
+		}
 	}
 	void update(sf::View& v1,vector<int> map,sf::Vector2u block,sf::Vector2u size) {
-		old = postion;
 		move();
-		physics(old, map, block, size);
+		physics(map, block, size);
 		animation();
 		viewupdate(v1);
 	}
