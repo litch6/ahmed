@@ -1,5 +1,8 @@
 #pragma once
 #include <SFML/Graphics.hpp>
+#include "oop.h"
+#include "Mario.h"
+#include <iostream>
 
 class Collision {
 public:
@@ -25,5 +28,62 @@ public:
 				side = 'D';
 		}
 		return true;
+	}
+public:
+	void hfalling(gameobject* g, vector<int>map, sf::Vector2u block, sf::Vector2u size) {
+		sf::FloatRect bounds = g->bounds();
+		bounds = sf::FloatRect({ bounds.position.x,bounds.position.y +bounds.size.y+2 }, { bounds.size.x ,1.f });
+		int startx = int(bounds.position.x / block.x),endx=int((bounds.position.x+bounds.size.x)/block.x);
+		int starty = int(bounds.position.y / block.y), endy = int((bounds.position.y + bounds.size.y) / block.y);
+		for (int i = startx; i <= endx; i++) {
+			for (int j = starty; j <= endy; j++) {
+				if (i > 0 && i < size.x && j>0 && j < size.y) {
+					if (map[i + j * size.x] >= 0) {
+						bool c = false;
+						g->setfalling(c);
+						break;
+					}
+					else
+					{
+						bool c = true;
+						g->setfalling(c);
+						break;
+					}
+				}
+			}
+		}
+	}
+	void hcollision(gameobject* g, vector<int> map, sf::Vector2u block, sf::Vector2u size) {
+		sf::FloatRect bounds = g->bounds();
+		int startx = max(int(bounds.position.x / block.x - 1.f), 0);
+		int endx = min(int((bounds.position.x + bounds.size.x) / block.x + 1), int(size.x));
+		int starty = max(int(bounds.position.y / block.y) - 1, 0);
+		int endy = min(int((bounds.position.y + bounds.size.y) / block.y + 1), int(size.y));
+		char side = ' ';
+		for (int i = startx; i <= endx; i++) {
+			for (int j = starty; j <= endy; j++) {
+				sf::FloatRect c2 = sf::FloatRect({ i * block.x * 1.f,j * block.y * 1.f }, { block.x * 1.f,block.y * 1.f });
+				if (i > 0 && i < size.x && j>0 && j < size.y) {
+					if (map[i + j * size.x] >= 0 && check(bounds, c2, side)) {
+						if (side == 'D') {
+							sf::Vector2f postion;
+							postion.y = c2.position.y - bounds.size.y;
+							postion.x = bounds.position.x;
+							g->setpostion(postion);
+						}
+						if (side == 'R') {
+							char nd = 'L';
+							g->setdir(nd);
+							return;
+						}
+						if (side == 'L') {
+							char nd = 'R';
+							g->setdir(nd);
+							return;
+						}
+					}
+				}
+			}
+		}
 	}
 };
